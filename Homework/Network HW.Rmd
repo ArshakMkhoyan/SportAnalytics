@@ -1,0 +1,125 @@
+---
+title: "Network analysis"
+author: "Arshak Mkhoyan"
+date: "11/18/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(igraph)
+library(sna)
+library(intergraph)
+library(network)
+library(SportsAnalytics270)
+library(dplyr)
+library(ggplot2)
+```
+
+#Firrst look at the data
+```{r}
+glimpse(transfers)
+```
+
+#Network analysis of football transfer
+#Creating a network object
+```{r}
+#creating IDs and geting the names of all clubs involved in analysis
+transfers_id=full_join(distinct(transfers, FROM), distinct(transfers, TO), by=c('FROM'='TO'))%>%rename(team=FROM)%>%mutate(id=1:n())%>%select(id, team)
+
+#Getting the information needed fpr network object
+tr=transfers%>%filter(!is.na(FROM), !is.na(TO))%>% 
+  group_by(FROM, TO)%>%summarise(weight=n(), mean.price=mean(na.omit(PRICE),))%>%
+  ungroup()
+
+tr_id=left_join(tr, transfers_id, by=c('FROM'='team'))%>% rename(From=id)%>%left_join( transfers_id, by=c('TO'='team'))%>% rename(To=id)%>%select(From, To, weight, mean.price)
+
+#Network object with node attribute: names, and edge attributes: number of transfers and mean price.
+#Created a network object
+net_transfer=network(tr_id, vertex.attr = transfers_id,  matrix.type = "edgelist", ignore.eval = FALSE)
+#Created a igraph object
+i_transfer=asIgraph(net_transfer)
+
+plot(net_transfer)
+```
+The network data consists of all the transfers regardless the country and the procedure. When trying to plot it, the graph seems messy. There is not many visible patterns from it, thus we will continue the analysis by dividing the data by getting only the sold transfers in EPL league.
+
+```{r}
+df=transfers%>%filter(!is.na(FROM), !is.na(TO), DESCRIPTION=='Sold', LEAGUE=='EPL')
+transfers_id=full_join(distinct(df, FROM), distinct(df, TO), by=c('FROM'='TO'))%>%rename(team=FROM)%>%mutate(id=1:n())%>%select(id, team)
+
+tr=transfers%>%filter(!is.na(FROM), !is.na(TO), DESCRIPTION=='Sold', LEAGUE=='EPL')%>% 
+  group_by(FROM, TO)%>%summarise(weight=n(), mean.price=mean(na.omit(PRICE),))%>%
+  ungroup()
+
+tr_id=left_join(tr, transfers_id, by=c('FROM'='team'))%>% rename(From=id)%>%left_join( transfers_id, by=c('TO'='team'))%>% rename(To=id)%>%select(From, To, weight, mean.price)
+
+#Network object with node attribute: names, and edge attributes: number of transfers and mean price.
+#Created a network object
+net_transfer=network(tr_id, vertex.attr = transfers_id,  matrix.type = "edgelist", ignore.eval = FALSE)
+#Created a igraph object
+i_transfer=asIgraph(net_transfer)
+
+
+set.seed(1)
+plot(net_transfer)
+```
+Now the graph seems pretty cool. We can see how some group of teams transfer the players just among them. At first I thought that these are the teams from EPL itself, and the other teams are the clubs from other leagues. This could be shown if we had a league attribute for each team. I was trying to add it by grouping and then joining the data; however, when I did so, I noticed that there are mistaces in the data.
+
+```{r}
+transfers%>%filter(!is.na(TO),!is.na(LEAGUE))%>%select(TO, LEAGUE)%>%distinct()%>%arrange(TO)
+```
+There are some typos in the names of teams. This can be the actual reason why the grapg is divided in this way. I could possibly fix it, but deadline is too close, so I will proceed having it in mind.
+
+```{r}
+trans.more.one=network::get.inducedSubgraph(net_transfer, eid=which(net_transfer %e% 'weight' > 1))
+set.seed(1)
+i_trans.more.one=asIgraph(trans.more.one)
+plot.network(trans.more.one, label=network::get.vertex.attribute(trans.more.one, 'team'), mode='fruchtermanreingold', label.cex=0.6, edge.lwd='weight', edge.col='weight')
+```
+Taking into account the typos, I assume that they were appearing only once, thus setting number of transfers between two team more than 1, we will get rid of them. In addition, this setting will exclude a lot of teams that had only one transfer, making our graph much clearer.
+
+#Network analysis
+```{r}
+sna::gden(net_transfer)
+sna::gden(trans.more.one)
+```
+In both cases the density is very low, meaning that teams are not conected through transfers.
+
+```{r}
+reciprocity(i_transfer)
+reciprocity(i_trans.more.one)
+```
+For both cases with and without edges with only one transaction, reciprocity is very small, indicating that only around 3% of transfers are bidirectional. This is rational, as I filtered the data to include only transfers in EPL, thus the teams which are from different leagues but which had some transfers to EPL's teams won't get any transfer back.
+
+
+```{r}
+d_in=igraph::degree(i_transfer, mode='in')
+transfers_id$team[which.max(d_in)]
+d_in[which.max(d_in)]
+```
+Given the data for all transfers sold in EPL, Chelsea is considered to be the most acquiring team in terms of different teams, having transfers bought from 34 different teams. 
+
+```{r}
+t_in=strength(i_transfer, mode='in')
+transfers_id$team[which.max(t_in)]
+t_in[which.max(t_in)]
+```
+Manchester City is the most acquiring team in terms of transfers bought, totaling 46 of them.
+
+```{r}
+d_out=igraph::degree(i_transfer, mode='out')
+transfers_id$team[which.max(d_out)]
+d_out[which.max(d_out)]
+
+t_out=strength(i_transfer, mode='out')
+transfers_id$team[which.max(t_out)]
+t_out[which.max(t_out)]
+```
+At the same time, the most selling team is Tottenham, with the total of transfers sold to 11 different team and 13 in total transfers.
+
+
+
+
+
+
+

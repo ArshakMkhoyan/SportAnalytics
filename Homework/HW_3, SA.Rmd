@@ -1,0 +1,147 @@
+---
+title: "HW_3, SA"
+author: "Arshak Mkhoyan"
+date: "10/10/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(SportsAnalytics270)
+library(dplyr)
+library(ggplot2)
+library(xlsx)
+```
+
+
+#Problem 1
+
+```{r}
+bl=f_data_sm[f_data_sm$LEAGUE=="Bundesliga 1",]
+ll=f_data_sm[f_data_sm$LEAGUE=="La Liga Primera Division",]
+sa=f_data_sm[f_data_sm$LEAGUE=="Serie A",]
+lc=f_data_sm[f_data_sm$LEAGUE=="Le Championnat",]
+football=rbind(bl,ll,sa,lc)
+
+stand=data.frame()
+for(country in c("Germany", "Spain"  , "Italy"  , "France" )) {
+for (i in c(1994:2018)) {
+  a=final_table(football,country=country,season=i)
+  a$season=i
+  a$country=country
+  stand=rbind(stand,a)
+}}
+
+stand$Wpct=(stand$W+0.5*stand$D)/stand$M
+
+Ideal_sd=stand%>%
+  group_by(season,country)%>%
+  select(M,season,country)%>%
+  summarise(M=unique(M))%>%
+  group_by(country)%>%
+  summarise(M=round(mean(M)))%>%
+  group_by(country)%>%
+  summarise(Ideal_sd=0.5/sqrt(M))
+
+SD_wpct=stand%>%
+  group_by(country)%>%
+  summarise(SD_wpct=sd(Wpct))
+SD=cbind(Ideal_sd,SD_wpct$SD_wpct)
+
+Noll_Scully=SD%>%
+  group_by(country)%>%
+  summarise(Noll_Scull=`SD_wpct$SD_wpct`/Ideal_sd)%>%
+  arrange(desc(Noll_Scull))
+Noll_Scully$country=ifelse(Noll_Scully$country=='Germany', 'Bundesliga 1', ifelse(Noll_Scully$country=='France', 'Le Championnat', ifelse(Noll_Scully$country=='Italy', 'Serie A', 'La Liga Primera Division')))
+Noll_Scully
+```
+To calculate average noll-scully number for each of 4 leagues, I calculated ideal standard deviation using average number of games played by teams in each season and standard deviation of winning percentage throught all seasons. The result of these calculations is the following: Serie A - 1.694, La Liga Primera Division - 1.58, Bundesliga 1 - 1.483, Le Championnat - 1.42.  
+
+
+#Problem 2
+
+```{r}
+ggplot(Noll_Scully, aes(x=country, y=Noll_Scull))+geom_bar(stat = 'identity')+coord_cartesian(ylim = c(1,1.75))+ggtitle('Noll-Scully number by league')+xlab('Country')+ylab('Noll-Scully')
+```
+
+According to the plot, Le Championnat is the most competitive league among all other presented, as it has the lowest Noll-Scully number. The worst by its competive balance is Italian league, Seria A.
+
+#Problem 3
+
+```{r}
+Ideal_sd2=stand%>%
+  group_by(season,country)%>%
+  select(M,season,country)%>%
+  summarise(M=unique(M))%>%
+  group_by(season,country)%>%
+  summarise(Ideal_sd=0.5/sqrt(M))
+SD_wpct2=stand%>%
+  group_by(season,country)%>%
+  summarise(SD_wpct=sd(Wpct))
+SD2=cbind(Ideal_sd2,SD_wpct=SD_wpct2$SD_wpct)
+Noll_Scully2=SD2%>%
+  group_by(season,country)%>%
+  summarise(Noll_Scull=SD_wpct/Ideal_sd)
+Noll_Scully2$league=ifelse(Noll_Scully2$country=='Germany', 'Bundesliga 1', ifelse(Noll_Scully2$country=='France', 'Le Championnat', ifelse(Noll_Scully2$country=='Italy', 'Serie A', 'La Liga Primera Division')))
+Noll_Scully2=Noll_Scully2[,-2]
+
+Bundes=Noll_Scully2[Noll_Scully2$league=='Bundesliga 1',]
+La_Liga=Noll_Scully2[Noll_Scully2$league=='La Liga Primera Division',]
+Le_Champ=Noll_Scully2[Noll_Scully2$league=='Le Championnat',]
+Serie_A=Noll_Scully2[Noll_Scully2$league=='Serie A',]
+```
+
+#Problem 4
+```{r}
+ggplot(Bundes, aes(x=season, y=Noll_Scull))+geom_bar(stat = 'identity')+coord_cartesian(ylim = c(1,1.95))+ggtitle('Noll-Scully number by season, Bundesliga')+xlab('Season')+ylab('Noll-Scully')
+ggplot(La_Liga, aes(x=season, y=Noll_Scull))+geom_bar(stat = 'identity')+coord_cartesian(ylim = c(1,2.35))+ggtitle('Noll-Scully number by season, La liga')+xlab('Season')+ylab('Noll-Scully')
+ggplot(Le_Champ, aes(x=season, y=Noll_Scull))+geom_bar(stat = 'identity')+coord_cartesian(ylim = c(0.9,2))+ggtitle('Noll-Scully number by season, Le Championnat')+xlab('Season')+ylab('Noll-Scully')
+ggplot(Serie_A, aes(x=season, y=Noll_Scull))+geom_bar(stat = 'identity')+coord_cartesian(ylim = c(1,2.35))+ggtitle('Noll-Scully number by season, Serie A')+xlab('Season')+ylab('Noll-Scully')
+
+```
+In Bundesliga, we can spot some positive trend, although there were some ups and downs in Noll-Scully number. There also were some huge differences in competetive balance from 2001 to 2004, when Noll-Scully number was dynamically changing. 
+For La Liga, competitive balance was almost the same before 2000; however, the Noll-Scully number decreased in year 2000 and was steadily increasind after that. 
+Le Championnat is the only leauge out of 4 presented that has Noll-Scully number lower than 1 (year 2000). After that there were ups and downs in the number, but overall it increased almost twice since 2000.
+The plot for Serie A shows that the competition balance improved after the scandal of 2006 and stayed same for around 6 years. The Noll-Scully number has been increasing since 2015.
+
+#Lagging indicators
+#Attendance
+
+```{r}
+Attendance=read.xlsx("Average per game attendance, SA.xlsx",sheetName = 'Average per game attendance, SA')
+Bundes_Attend=cor(Bundes$Noll_Scull[3:24],Attendance$Germany)
+plot(Bundes$Noll_Scull[3:24],Attendance$Germany)
+La_Liga_Attend=cor(La_Liga$Noll_Scull[3:24],Attendance$Spain)
+plot(La_Liga$Noll_Scull[3:24],Attendance$Spain)
+Le_Champ_Atend=cor(Le_Champ$Noll_Scull[3:24],Attendance$France.)
+plot(Le_Champ$Noll_Scull[3:24],Attendance$France.)
+Serie_A_Attend=cor(Serie_A$Noll_Scull[3:24],Attendance$Italy.)
+plot(Serie_A$Noll_Scull[3:24],Attendance$Italy.)
+
+```
+The data for the average attendance per game for each league is taken from The Statistical Portal (https://www.statista.com/statistics/261213/european-soccer-leagues-average-attendance/). As we can see, the results are different for each league. In my opinion, the higher the imbalance in the league, the lower the attendance, meaning that people shouldn't be interested in wathing a game, in wich probabilities for win for two teams are diverse. In this case Noll-Scully number and Attendance should be negatively correlated. However, only Serie A shows this pattern with correlation of -0.38. Le Championnat has the lowest correlation among the 4 leagues, which is positive, but very weak (0.056). Bundesliga and La Liga have strong and positive correlations with attendance, 0.53 and 0.77 respectively. 
+
+#Revenue
+
+```{r}
+Revenue=read.xlsx("Revenue in mil. EUR.xlsx",sheetName = 'Sheet1')
+cor(Bundes$Noll_Scull[3:24],Revenue$Germany)
+plot(Bundes$Noll_Scull[3:24],Revenue$Germany)
+cor(La_Liga$Noll_Scull[3:24],Revenue$Spain)
+plot(La_Liga$Noll_Scull[3:24],Revenue$Spain)
+cor(Le_Champ$Noll_Scull[3:24],Revenue$France)
+plot(Le_Champ$Noll_Scull[3:24],Revenue$France)
+cor(Serie_A$Noll_Scull[3:24],Revenue$Italy)
+plot(Serie_A$Noll_Scull[3:24],Revenue$Italy)
+```
+The data for the total revenue of each league for the given season is taken from The Statistical Portal (https://www.statista.com/statistics/261218/big-five-european-soccer-leagues-revenue/). Honestly, I hardly can explain the causation of this relationship, but correlation coefficents of all leagues are positive and somewhat strong. 
+
+#Leading indicators
+#Total betting amount
+I did not find an appropriate data to check my assumption. In my opinion, the higher is the total amount bet in the league, the higher is the imbalance there. It can be explained by the fact, that one is more confidente to bet on the game, in which one of the teams has an advantage againts the other, so that it has much higher probabilities to win. So imbalance might cause higher betting amount. 
+
+#Corruption index of the country
+All the data was paid, so I was not able to download it and find the correlation between corruption index and Noll-Skully number. From my point of veiw, these numbers should be positively correlated, meaning that the higher the corruption in the country, the higher the imbalance in the league. It can be so, if some more rich teams use their purchaising power and buy the games, so that the victory is their. 
+
+
+
+

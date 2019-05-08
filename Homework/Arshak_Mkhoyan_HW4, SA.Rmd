@@ -1,0 +1,119 @@
+---
+title: "HW4, SA"
+author: "Arshak Mkhoyan"
+date: "10/29/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(XML)
+library(dplyr)
+library(ggplot2)
+```
+
+
+#Real Plus/Minus metric in NBA
+In my report I will concentrate on Real Plus/Minus individual perfomance metric in basketball. 
+
+#Data collection
+```{r, echo=F}
+url='http://www.espn.com/nba/statistics/rpm/_/year/2018/sort/DRPM'
+playertable=readHTMLTable(url, which = 1)
+for (i in 2:14) {
+url1=paste('http://www.espn.com/nba/statistics/rpm/_/year/2018/page/',i ,'/sort/DRPM', sep='')
+playertable1=readHTMLTable(url1, which = 1)
+playertable=rbind(playertable, playertable1)
+}
+playertable=playertable[,-1]
+playertable=playertable%>%
+  mutate(GP=as.numeric(as.character(GP)), MPG=as.numeric(as.character(MPG)), ORPM=as.numeric(as.character(ORPM)), DRPM=as.numeric(as.character(DRPM)), RPM=as.numeric(as.character(RPM)), WINS=as.numeric(as.character(WINS)), NAME=as.character(NAME), TEAM=as.character(TEAM))
+
+url_new='http://www.espn.com/nba/statistics/player/_/stat/scoring-per-game/sort/avgPoints/year/2018'
+playerUsualStats=readHTMLTable(url_new, which = 1)
+lastnumber=c(41,81,121,161,201,241)
+for (i in lastnumber) {
+url1_new=paste('http://www.espn.com/nba/statistics/player/_/stat/scoring-per-game/sort/avgPoints/year/2018/count/',i, sep='')
+playertable1_new=readHTMLTable(url1_new, which = 1)
+playerUsualStats=rbind(playerUsualStats, playertable1_new)
+}
+playerUsualStats= playerUsualStats%>%
+  filter(RK!='RK')%>%
+  mutate(NAME=PLAYER)%>%
+  select(-PLAYER)
+playerUsualStats=playerUsualStats[,-1]
+playerUsualStats= playerUsualStats%>%
+  mutate(TEAM=as.character(TEAM),NAME=as.character(NAME), GP=as.numeric(as.character(GP)), MPG=as.numeric(as.character(MPG)), PTS=as.numeric(as.character(PTS)), FG_perc=as.numeric(as.character(`FG%`)), `3P_perc`=as.numeric(as.character(`3P%`)), FT_perc=as.numeric(as.character(`FT%`)), `FGM-FGA`=as.character(`FGM-FGA`), `3PM-3PA`=as.character(`3PM-3PA`), `FTM-FTA`=as.character(`FTM-FTA`))%>%
+  select(-`3P%`,-`FT%`,-`FG%`)
+playerUsualStats$FGM=as.numeric(t(as.data.frame.list(strsplit(playerUsualStats$`FGM-FGA`, '-'))[1,]))
+playerUsualStats$FGA=as.numeric(t(as.data.frame.list(strsplit(playerUsualStats$`FGM-FGA`, '-'))[2,]))
+playerUsualStats$`3PM`=as.numeric(t(as.data.frame.list(strsplit(playerUsualStats$`3PM-3PA`, '-'))[1,]))
+playerUsualStats$`3PA`=as.numeric(t(as.data.frame.list(strsplit(playerUsualStats$`3PM-3PA`, '-'))[2,]))
+playerUsualStats$FTM=as.numeric(t(as.data.frame.list(strsplit(playerUsualStats$`FTM-FTA`, '-'))[1,]))
+playerUsualStats$FTA=as.numeric(t(as.data.frame.list(strsplit(playerUsualStats$`FTM-FTA`, '-'))[2,]))
+playerUsualStats=playerUsualStats%>%select( -`FGM-FGA`, -`3PM-3PA`, -`FTM-FTA`)%>%
+  select(NAME,PTS,FGM,FGA,FG_perc, `3PM`, `3PA`, `3P_perc`, FTM, FTA, FT_perc)
+
+players_stat=merge(playertable, playerUsualStats, by='NAME')
+players_stat$PLAYER=as.character(t(as.data.frame.list(strsplit(players_stat$NAME, ', '))[1,]))
+players_stat$POSITION=as.character(t(as.data.frame.list(strsplit(players_stat$NAME, ', '))[2,]))
+players_stat=select(players_stat, PLAYER,TEAM,POSITION, GP:FT_perc)
+
+```
+
+The data was scraped from the ESPN website (http://www.espn.com/). It cointains the information and statistics for 2017-18 season of NBA.
+
+Metadata:
+PLAYER - players name.
+TEAM - player's team.
+POSITION - player's position
+GP - number of games played
+MPG - minutes per game
+ORPM - Player's estimated on-court impact on team offensive performance, measured in points scored per 100 offensive possessions
+DRPM - Player's estimated on-court impact on team defensive performance, measured in points allowed per 100 defensive possessions
+RPM - Player's estimated on-court impact on team performance, measured in net point differential per 100 offensive and defensive possessions. RPM takes into account teammates, opponents and additional factors
+WINS - "RPM Wins" provide an estimate of the number of wins each player has contributed to his team's win total on the season. RPM Wins include the player's Real Plus-Minus and his number of possessions played.
+PTS - points per game
+FGM - field goals made per game
+FGA - field goals attempted per game
+FG_perc - field goal percentage
+3PM - 3-point field goals made per game
+3PA - 3-point field goals attempted per game
+3P_perc - 3-point field goal percentage
+FTM - free throws made per game
+FTA - free throws attempted per game
+FT_perc - free throws percentage
+
+#Analysis of the metric
+
+Real plus/minus is computed combining both offensive RPM, and defensive plus/minus. As most of the metrics used to evaluate individual perfomance, it is not an ideal one. Let us discuss its advantages and disadvantages. 
+
+#Disadvantages
+1.RPM does not account for the quality of the player's teammates and opponents. 
+Basicaly, what it does is it computes the score for a given player taking other players on the court as average ones. Thus, it can easily mispresent certain players' contributions. Whereas, Adjusted Plus/Minus takes into account all other players on the court. 
+
+2.Offense and defense are equally important in Real Plus-Minus.
+In this case, a player, who is good at deffence but bad at offence, can be rated same as the player, who is bad at deffence but good at offence. In my opinion, it is hard to undertand the players actual contribution through RPM.
+```{r, echo=F}
+ggplot(players_stat, aes(x=DRPM, y=ORPM))+geom_line()+ggtitle('Correlation between ORPM and DRPM')
+paste('Correlation between ORPM and DRPM is',round(cor(players_stat$ORPM,players_stat$DRPM), digits = 3))
+```
+As we can see, the correlation between Offensive and Defensive RPM is next to 0, meaning the players tend to usually be good at only one of these measures or average in both. 
+
+3.PRM Does not take into account minutes played.
+It is important to take into account the minutes played by a player per game. If we don't, then two players can have the same PRM, although one spent twice less time on court than the other. The one who played less time but had the same RPM should be awarded with higher individual perfomance value. So the time can be represented as "weight" when computing RPM.
+
+#Advantages
+1.RPM can be used for predictive purpose.
+As RPM is composed of historic data, we can use it to predict the future perfomance of the player and the total outcome of the game, taking all RPM measures of players.
+
+2.Shows approximate overall perfomance of the player.
+PRM measures can be compared among the players to approximately understand who is doing better than others.
+
+#Conclusion
+Overall, RPM metric can show an approximate picture of NBA players' perfomances, although some improvements can take place.
+
+
+
+
+

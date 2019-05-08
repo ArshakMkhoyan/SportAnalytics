@@ -1,0 +1,139 @@
+---
+title: "HW6"
+author: "Arshak Mkhoyan"
+date: "12/8/2018"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(SportsAnalytics270)
+library(dplyr)
+library(ggplot2)
+library(ggExtra)
+load('court.rda')
+```
+
+```{r}
+ids <- getPlayerID(2018)
+needed_ids=match(c('Harden, James', 'Curry, Stephen', 'James, LeBron'),ids$DISPLAY_LAST_COMMA_FIRST)
+nids=as.numeric(as.character(ids[needed_ids,1]))
+```
+
+```{r}
+statistics_player=data.frame()
+for (i in nids) {
+link<-paste("http://stats.nba.com/stats/shotchartdetail?","SeasonType=Regular+Season&",
+    "TeamID=0&", "PlayerID=", as.character(i),'&', "GameID=&", "Outcome=&", 
+    "Location=&", "Month=0&","SeasonSegment=&","DateFrom=&",
+    "DateTo=&", "OpponentTeamID=0&","VsConference=&",
+    "VsDivision=&", "Position=&",  "RookieYear=&",
+   "GameSegment=&","Period=0&","LastNGames=0&","ContextMeasure=FGA&",
+    "PlayerPosition=", sep="")
+
+shots<-readLines(link)
+shots<-jsonlite::fromJSON(shots)
+shots1<-dplyr::as_data_frame(shots$resultSets$rowSet[[1]])
+statistics_player=bind_rows(statistics_player,shots1)
+}
+colnames(statistics_player)<-shots$resultSets$headers[[1]]
+for (i in c(8:10,17:21)){
+statistics_player[,i]=as.numeric(statistics_player[,i])
+}
+```
+For this particular analysis, I decided to consider the following 3 players: James Harden, Stephen Curry, and LeBron James. All of them are included in the list of top 10 players in NBA of season 2017-18, ranking made by ESPN.com.
+
+#Overall statistics with court
+```{r}
+statistics_player$Xconverted=statistics_player$LOC_X*(-0.1)+25
+statistics_player$Yconverted=statistics_player$LOC_Y*(0.1)+5
+
+Made=filter(statistics_player, EVENT_TYPE=='Made Shot')
+court+geom_point(data=Made,aes(Xconverted, Yconverted), alpha=0.3)+facet_grid(~PLAYER_NAME)+ggtitle('Shots Made')
+
+Miss=filter(statistics_player, EVENT_TYPE=='Missed Shot')
+court+geom_point(data=Miss,aes(Xconverted, Yconverted), alpha=0.3)+facet_grid(~PLAYER_NAME)+ggtitle('Shots Missed')
+```
+The general plots of shots. We can observe that LeBron had much more shots than other two players. To see it more precise, cosider the plot below.
+
+```{r}
+ggplot(data = statistics_player, aes(x = PLAYER_NAME))+geom_bar(stat = "count") + ggtitle("Number of shots made")
+```
+
+#Hit maps
+```{r}
+court+ stat_density_2d(data=statistics_player, aes(x=Xconverted, y=Yconverted, fill=..density..), geom='raster', contour=F, interpolate=F, n=200, show.legend=F)+scale_fill_viridis_c(option='inferno')+facet_grid(~PLAYER_NAME)
+```
+Hit maps do not give us a lot of information, as there are too manny games played by each player. It works better when analysing a single game. On average players make more shots staying next to the basket, what is quite logical.
+We will proceed with the analysis of specific variables.
+
+#Accuracy by Action type
+```{r}
+statistics_player%>%group_by(ACTION_TYPE)%>%summarise(Total=n())%>%arrange(desc(Total))%>%mutate(ACTION_TYPE=factor(ACTION_TYPE, levels = ACTION_TYPE))%>%
+  ggplot(aes(ACTION_TYPE,Total))+geom_col()+theme(axis.text.x = element_blank())
+```
+As far as we have too many action types, it wouldn't be rational to plot all of them together. Thus I will take only top 10 of them, as others occured in much less cases. Those 10 ones are represented in the graph below.
+
+```{r}
+statistics_player%>%group_by(ACTION_TYPE)%>%summarise(Total=n())%>%arrange(desc(Total))%>%top_n(10, Total)%>%mutate(ACTION_TYPE=factor(ACTION_TYPE, levels = ACTION_TYPE))%>%
+  ggplot(aes(ACTION_TYPE,Total))+geom_col()+theme(axis.text.x = element_blank())+coord_flip()
+```
+We will now compute the accuracies for these 10 action types.
+
+```{r}
+action1=statistics_player%>%group_by(ACTION_TYPE)%>%summarise(Total=n())%>%arrange(desc(Total))%>%top_n(10, Total)%>%select(ACTION_TYPE)%>%unique()%>%unlist()
+statistics_player_action=statistics_player[statistics_player$ACTION_TYPE %in% action1,]
+statistics_player_action=statistics_player_action%>%group_by(ACTION_TYPE, PLAYER_NAME, EVENT_TYPE)%>% summarise(Total=n())%>%mutate(delete=sum(Total))%>%mutate(Frequency=Total/delete)%>%filter(EVENT_TYPE=='Made Shot')%>%select(-EVENT_TYPE, -Total, -delete)
+
+ggplot(statistics_player_action, aes(x = reorder(ACTION_TYPE,Frequency), y = 1,color=PLAYER_NAME)) +
+  geom_point(aes(y = Frequency), size = 3, stat = "identity") +coord_flip() +labs(y = "Accuracy", x = "", title = "Accuracy by Action type")+ theme(legend.title = element_blank())
+```
+According to the plot of Accuracies, James Harden is doing worst for almost every action type, exept layup shot, in which Stephen Curry is the worst. Stephen Cury and LeBron James on average have the same accuracy.
+We will now proceed with analysis of shot types.
+
+#Shot type accuracy
+```{r}
+ggplot(statistics_player, aes(x=SHOT_TYPE, fill=PLAYER_NAME))+geom_bar(position = "dodge")+ theme(legend.title = element_blank())
+```
+As far as, all three of them played different number of games, the plot above might not represent the right picture of shot types' frequencies. For this reason, I decided to count the number of shots per game. I would better average them by minutes played, however we don't have such information. Therefore, for simplicity, we will average number of shots by games played.
+
+```{r}
+games=statistics_player%>%select(GAME_ID,PLAYER_NAME)%>%distinct()%>%group_by(PLAYER_NAME)%>%summarise(Total_Game=n())
+shot_type=statistics_player%>%group_by(PLAYER_NAME, SHOT_TYPE) %>%summarise(Total=n())%>% left_join(games)%>%mutate(Per_Game=Total/Total_Game)%>%select(-Total, -Total_Game)
+ggplot(shot_type, aes(x=SHOT_TYPE, y=Per_Game, fill=PLAYER_NAME))+geom_col(position = "dodge")+ theme(legend.title = element_blank())
+```
+As we can see, LeBron had the highest number of 2PT Field shots per game and the least 3PT Field shots per game compared to other two players. 
+
+```{r}
+statistics_player_shot=statistics_player%>%group_by(SHOT_TYPE, PLAYER_NAME, EVENT_TYPE)%>% summarise(Total=n())%>%mutate(delete=sum(Total))%>%mutate(Frequency=Total/delete)%>%filter(EVENT_TYPE=='Made Shot')%>%select(-EVENT_TYPE, -Total, -delete)
+
+ggplot(statistics_player_shot, aes(x = reorder(SHOT_TYPE,Frequency), y = 1,color=PLAYER_NAME)) +
+  geom_point(aes(y = Frequency), size = 3, stat = "identity") +coord_flip() +labs(y = "Accuracy", x = "", title = "Accuracy by Shot type")+ theme(legend.title = element_blank())
+```
+LeBron has the highest accuracy for 2PT shots, reaching almost 55%, At the same time, he has the highest number of 2PT shots per game. That is why, he has the highest contribution of 2PT shots to total points scored during the game. 
+As for 3PT shots, Stephen has the highest accuracy, which is around 44%. He also has the highest number of 3PT shots per game. Thus, he has the highest contribution of 3PT shots to total points scored during the game. 
+
+#Accuracy By Zone
+```{r}
+statistics_player%>%mutate(SHOT_ZONE_RANGE=factor(SHOT_ZONE_RANGE, levels = c("Less Than 8 ft.", "8-16 ft.","16-24 ft." ,"24+ ft.","Back Court Shot")))%>%
+ggplot( aes(x = SHOT_ZONE_RANGE))+geom_bar(aes(fill = EVENT_TYPE), stat = "count", position = "fill") + ggtitle("Shot Accuracy by Distance")+xlab('Shot Distance')+ylab('Accuracy') +facet_grid(~PLAYER_NAME)+coord_flip()+ theme(legend.title = element_blank())
+```
+We can see a clear correlation between the distance and result of shot. Lower the distance higher the probability of scoring. LeBron has the highest accuracy of shots in the range less then 8 ft. All other accuracies for other ranges are almost the same for 3 players.
+
+#Accuracy by minutes remaining
+```{r}
+statistics_player%>%filter(MINUTES_REMAINING!='12')%>% mutate(MINUTES_REMAINING=factor(MINUTES_REMAINING, levels =c('0','1','2','3','4','5','6','7','8','9','10','11')))%>%
+ggplot( aes(x = MINUTES_REMAINING))+geom_bar(aes(fill = EVENT_TYPE), stat = "count", position = "fill") + ggtitle("Shot Accuracy by minutes remaining")+xlab('Shot Distance')+ylab('Accuracy') +facet_grid(~PLAYER_NAME)+coord_flip()+ theme(legend.title = element_blank())
+```
+An interesting finding is that all three players have the least accuracy in last minut of the period. This can be explained by the fact that in the last possesion of period players risk more as there is nothing to lose, thus its worth to try, and in most cases they shot from long range and miss the shot.
+In other cases accuracy is almost the same.
+
+#Conclusion
+After analysing accuracies in different cases, We can say that LeBron has the highest accuracy almost depending on any aspect, expect the 3PT throws' accuracy, which is dominated by Curry.
+
+
+
+
+
+

@@ -1,0 +1,175 @@
+---
+title: "Homework 2, SA"
+author: "Arshak Mkhoyan"
+date: "9/26/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(SportsAnalytics270)
+library(ggplot2)
+library(dplyr)
+library(elo)
+library(measures)
+data("f_data_sm")
+data("nba2009_2017")
+```
+
+#Problem 1
+```{r}
+bl=f_data_sm[f_data_sm$LEAGUE=='Bundesliga 1',]
+```
+The league I choose is Bundesliga 1.
+
+#Problem 2
+```{r}
+stand=data.frame()
+for (i in c(1994:2018)) {
+  a=final_table(bl,country='Germany',season=i)
+  a$season=i
+  stand=rbind(stand,a)
+}
+```
+Creating variable of wining through combining winings and half of draws
+```{r}
+stand$WD=stand$W+0.5*stand$D
+stand$WP=stand$WD/stand$M
+```
+
+#Problem 3
+```{r}
+ggplot(stand,aes(x=stand$DIFF,y=WP))+geom_point()+geom_smooth(method='lm',se=F)+labs(x='Goal differential', y='Winning percentage')
+```
+According to the graph, the relationship between Goal differential and Winning percentage is positive and linear with minor errors. 
+
+```{r}
+cor(stand$DIFF,stand$WP)
+```
+Correlation coefficient of these two variables is 0.96, which indicates a strong relationship between these two variables. The bigger the goal difference, the higher winning percentage will be.
+
+#Problem 4
+Creating a ratio of scored goals to the missed ones.
+```{r}
+stand$ratio=stand$GF/stand$GA
+```
+Creating a ratio of wins to losses
+```{r}
+stand$wlratio=stand$WD/stand$L
+```
+Creating a model with intercept 0 and with log representation of ratios
+```{r}
+model=lm(log(wlratio)~0+log(ratio),data=stand)
+coefficients(model)
+```
+K value is estimated to be 1.45. This coefficient is the optimal one for computing the win percentage using goals scored and missed.
+
+#Problem 5
+Pythagorean Winning percentage
+```{r}
+stand$PW_perc=stand$GF^1.45/(stand$GF^1.45+stand$GA^1.45)
+
+```
+Pythagorean Wins
+```{r}
+stand$PW=round(stand$PW_perc*stand$M)
+```
+
+#Problem 6
+```{r}
+Underperfomed=stand%>%
+  filter(WD<PW)%>%
+  select(TEAM, season,WD,PW)
+  
+Oveperformed=stand%>%
+  filter(WD>PW)%>%
+  select(TEAM, season,WD,PW)
+```
+
+#ELO rating scores
+```{r}
+b=list()
+a=list()
+for (k in c(15,20,25)){
+  for (home in c(50,100,150)){
+el1=elo.run(score(home.PTS,away.PTS)~adjust(home.TEAM_NAME, home)+away.TEAM_NAME,data=nba2009_2017[nba2009_2017$SEASON_ID=='2009',],k=k)
+fe=0.75*final.elos(el1)+0.25*1500
+el1=as.data.frame(el1)
+el1$season=2009
+    for (i in c(2010:2017)) {
+      el=elo.run(score(home.PTS,away.PTS)~adjust(home.TEAM_NAME, home)+away.TEAM_NAME,data=nba2009_2017[nba2009_2017$SEASON_ID==i,],k=k, initial.elos = fe)
+      fe=0.75*final.elos(el)+0.25*1500
+      el_n=as.data.frame(el)
+      el_n$season=i
+      el1=rbind(el1,el_n)
+    } 
+    a[[home/50]]=el1
+  }
+  b[[k/5-2]]=a}
+Final_data=b
+```
+Final_data variable is a list which contains the data for all seasons for different k and home advantage values. On the website, provided in the homework, the formula for adjusted elo ratings was give as a sum of 75% of last season's elo rating plus 25% of the average one, which is 1500. In addition, the optimal values are said to be 20 and 100 for k and home advantage respectively. That's why, I took k to be equal to 15,20,25 and home advantage - 50,100,150. To check which combination is the best, I will use Brier score.
+
+```{r}
+BS=data.frame()
+for (i in c(1:3)) {
+  for (l in c(1:3)) {
+p=Final_data[[i]][[l]]%>%
+  group_by(season)%>%
+  summarise(Brier = Brier(p.A,wins.A,positive=1))%>%
+  arrange(desc(Brier))
+p$k=(i+2)*5
+p$Home.Advantage=l*50
+BS=rbind(BS,p)
+  }}
+BS%>%
+  group_by(k,Home.Advantage)%>%
+  summarise(BrierSum = sum(Brier))%>%
+  arrange(BrierSum)
+```
+After taking the sum of Brier scores for all combinations of k and home advantage, I came to the conclusion that the combination, in which k=20 and home advantage=50, is the best. Although I am not sure how effective it is to compare the combination using the sum of Brier scores, I find it rational, as the best combination is the one having the lowest sum of these score, meaning having the lowest mean squared errors. 
+
+```{r}
+BS[BS$k==20&BS$Home.Advantage==50,]
+```
+I will continue with the model, in which k=20 and home advantage=100. Given the results of Brier score, I would state that the model is good enough, as the smaller the brier score, the better the predictive power of the model.The highest score is 0.219, which stands for the mean squared error for 2016 season.
+
+```{r}
+Final_data[[2]][[1]]%>%
+  group_by(season)%>%
+  summarise(Brier = Brier(p.A,wins.A,positive=1))
+
+```
+According to Brier scores, the model is getting both better and worse from season to season.
+
+```{r}
+Final_data[[2]][[1]]%>%
+  group_by(season, team.A)%>%
+  summarise(Brier = Brier(p.A,wins.A,positive=1))
+```
+From the given table, it is hard to see whether there is any team responsible for consistent errors in the model. Generely, it seems like all the teams are doing better and worse from season to season.
+
+```{r}
+  el12=elo.run(score(home.PTS,away.PTS)~adjust(home.TEAM_NAME, 50)+away.TEAM_NAME,data=nba2009_2017[nba2009_2017$SEASON_ID=='2009',],k=20)
+    fe2=0.75*final.elos(el12)+0.75*1500
+    el2=c()
+    for (i in c(2010:2017)) {
+      el2=elo.run(score(home.PTS,away.PTS)~adjust(home.TEAM_NAME, 50)+away.TEAM_NAME,data=nba2009_2017[nba2009_2017$SEASON_ID==i,],k=20, initial.elos = fe)
+      fe2=0.75*final.elos(el2)+0.25*1500
+}
+    final.elos(el2)
+    elo.prob(elo.A = 1324.069,elo.B = 1650.081)
+    elo.prob(elo.A = 1351.691 ,elo.B = 1484.058)
+    elo.prob(elo.A = 1598.491,elo.B = 1357.694)
+    elo.prob(elo.A = 1380.885 ,elo.B = 1277.894)
+    
+
+```
+Given the last elo scores, the pridictions are the following: Philadelphia 76ers will win Orlando Magic by 87% chance, Washington Wizards will win New York Knicks by 68% chance, New Orleans Pelicans will win Atlanta Hawks by 80% chance, and Sacramento Kings will win Phoenix Suns by 64% chance. 
+
+
+
+
+
+
+
+

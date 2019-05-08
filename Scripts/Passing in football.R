@@ -1,0 +1,82 @@
+library(SportsAnalytics)
+library(SportsAnalytics270)
+library(dplyr)
+library(network)
+library(igraph)
+library(intergraph)
+library(circlize)
+data("wc_14_final")
+dim(wc_14_final$argentina_passing)
+#Argentina
+
+i_arg=igraph::graph.adjacency(as.matrix(wc_14_final$argentina_passing), mode = 'directed', weighted = T, diag = F)
+net_arg=intergraph::asNetwork(i_arg)
+list.edge.attributes(net_arg)
+#add player names
+network::set.vertex.attribute(net_arg,'player.name', wc_14_final$argentina_team$Player_name)
+get.vertex.attribute(net_arg, 'player.name')
+network::set.vertex.attribute(net_arg,'player.position', as.character(wc_14_final$argentina_team$Position))
+get.vertex.attribute(net_arg, 'player.position')
+network::set.vertex.attribute(net_arg,'player.completed', wc_14_final$argentina_team$Pass_completed)
+wc_14_final$argentina_team$Completion=wc_14_final$argentina_team$Pass_completed/wc_14_final$argentina_team$Pass_attempted
+network::set.vertex.attribute(net_arg,'completion', wc_14_final$argentina_team$Completion)
+
+net_st=get.inducedSubgraph(net_arg, v=1:11)
+set.seed(1)
+coords=plot(net_st, suppress.axes=F)
+coords[1,]=c(7,2)
+coords[2,]=c(8,3.5)
+coords[9,]=c(8,0.5)
+coords[3,]=c(9,4.5)
+coords[10,]=c(9,-1)
+coords[4,]=c(10.5,3.5)
+coords[8,]=c(10.5,0.5)
+coords[5,]=c(11.5,-1)
+coords[11,]=c(11.5,4.5)
+coords[7,]=c(13.5,0.5)
+coords[6,]=c(14.5,3.5)
+plot(net_st, coord=coords, suppress.axes=F, label= net_st%v%'player.name')
+plot(net_st, vertex.col='player.position', edge.lwd='weight', coord=coords)
+plot(net_st, vertex.col='player.position', coord=coords, vertex.cex=2*(net_st%v%'completion'), label= net_st%v%'player.name')
+
+st_mat=as.matrix(net_st, matrix.type = 'adjacency', attrname = 'weight')
+colnames(st_mat)= net_st%v% 'player.name'
+rownames(st_mat)= colnames(st_mat)
+chordDiagram(st_mat, directional = T)
+
+
+#Germany
+i_arg=igraph::graph.adjacency(as.matrix(wc_14_final$argentina_passing), mode = 'directed', weighted = T, diag = F)
+net_arg=intergraph::asNetwork(i_arg)
+list.edge.attributes(net_arg)
+#add player names
+network::set.vertex.attribute(net_arg,'player.name', wc_14_final$argentina_team$Player_name)
+get.vertex.attribute(net_arg, 'player.name')
+network::set.vertex.attribute(net_arg,'player.position', as.character(wc_14_final$argentina_team$Position))
+get.vertex.attribute(net_arg, 'player.position')
+network::set.vertex.attribute(net_arg,'player.completed', wc_14_final$argentina_team$Pass_completed)
+wc_14_final$argentina_team$Completion=wc_14_final$argentina_team$Pass_completed/wc_14_final$argentina_team$Pass_attempted
+network::set.vertex.attribute(net_arg,'completion', wc_14_final$argentina_team$Completion)
+
+net_st=get.inducedSubgraph(net_arg, v=1:11)
+set.seed(1)
+coords=plot(net_st, suppress.axes=F)
+coords[1,]=c(7,2)
+coords[2,]=c(8,3.5)
+coords[9,]=c(8,0.5)
+coords[3,]=c(9,4.5)
+coords[10,]=c(9,-1)
+coords[4,]=c(10.5,3.5)
+coords[8,]=c(10.5,0.5)
+coords[5,]=c(11.5,-1)
+coords[11,]=c(11.5,4.5)
+coords[7,]=c(13.5,0.5)
+coords[6,]=c(14.5,3.5)
+plot(net_st, coord=coords, suppress.axes=F, label= net_st%v%'player.name')
+plot(net_st, vertex.col='player.position', edge.lwd='weight', coord=coords)
+plot(net_st, vertex.col='player.position', coord=coords, vertex.cex=2*(net_st%v%'completion'), label= net_st%v%'player.name')
+
+st_mat=as.matrix(net_st, matrix.type = 'adjacency', attrname = 'weight')
+colnames(st_mat)= net_st%v% 'player.name'
+rownames(st_mat)= colnames(st_mat)
+chordDiagram(st_mat, directional = T)

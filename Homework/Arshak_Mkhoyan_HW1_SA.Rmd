@@ -1,0 +1,140 @@
+---
+title: "Homework#1_SA"
+author: "Arshak Mkhoyan"
+date: "9/18/2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(SportsAnalytics270)
+library(dplyr)
+library(ggplot2)
+library(BradleyTerry2)
+library(extraDistr)
+data("nba2009_2017")
+data("f_data_sm")
+```
+
+# Problem 1
+
+The leage I have chosen is Premier Leage 
+```{r}
+Average=f_data_sm%>%
+  filter(LEAGUE=='Premier League')%>%
+  group_by(SEASON)%>%
+  summarise(Home_Average=mean(FTHG), Away_Average=mean(FTAG))
+```
+
+# Problem 2
+
+```{r}
+ggplot(data = Average, aes(x=SEASON))+geom_line(aes(y=Away_Average,colour='Away'))+geom_line(aes(y=Home_Average,colour="Home"))+labs(title='Average goals for Home and Away teams',x='Season',y='Average Goals',colour='Teams')
+```
+In my opinion, there are no trend or seasonality patterns in each of the presented lines. The most interesting thing, from my point of view, is that on average home teams score more that away teams. 
+
+# Problem 3
+
+```{r}
+home=f_data_sm%>%
+  filter(SEASON==1994, LEAGUE=='Premier League')%>%
+  group_by(HOMETEAM)%>%
+  summarise(mean=mean(FTHG),
+            var=var(FTHG))
+away=f_data_sm%>%
+  filter(SEASON==1994, LEAGUE=='Premier League')%>%
+  group_by(AWAYTEAM)%>%
+  summarise(mean=mean(FTAG),
+            var=var(FTAG))
+mean=home$mean[home$HOMETEAM=='Tottenham']-away$mean[away$AWAYTEAM=='Arsenal']
+sd=sqrt(home$var[home$HOMETEAM=='Tottenham']+away$var[away$AWAYTEAM=='Arsenal'])
+Away_p=pnorm(0,mean,sd,lower.tail = T)
+Home_p=pnorm(0,mean,sd,lower.tail = F)
+```
+Probability of Tottenham to win is 0.51, while probability of Arsenal to win is 0.49.
+
+# Problem 4
+
+```{r}
+pl=f_data_sm%>%
+  filter(SEASON==1994,LEAGUE=='Premier League')%>%
+  select(HOMETEAM,AWAYTEAM,FTHG,FTAG)
+pl1<-data.frame(pl[,c('HOMETEAM','AWAYTEAM','FTHG')], Home=1)
+pl2<-data.frame(pl[,c('AWAYTEAM','HOMETEAM','FTAG')], Home=0)
+colnames(pl1)<-c('TEAM','Opponent', 'GOAL','Home')
+colnames(pl2)<-c('TEAM','Opponent', 'GOAL','Home')
+pl_new<-rbind(pl1,pl2)
+model=glm(GOAL~TEAM+Opponent+Home, data=pl_new,family=poisson(link = log))
+options(scipen = 1,digits = 4)
+gh=predict(model,data.frame(Home=1,TEAM='Tottenham',Opponent='Arsenal'), type = 'response')
+ga=predict(model,data.frame(Home=0,TEAM='Arsenal',Opponent='Tottenham'), type = 'response')
+Away_p1=sum(dskellam(c(-100:-1),gh,ga))
+Home_p1=sum(dskellam(c(1:100),gh,ga))
+```
+Probability of Tottenham to win is 0.23, while probability of Arsenal to win is 0.47.
+```{r}
+Home_coef=exp(coefficients(model)['Home'])
+```
+An exponent of home team coefficient shows how many times the average number of goals will be more for a team playing at home than for the same team playing away, where the opponent is the same. 
+
+# Problem 5
+
+```{r}
+TA=f_data_sm%>%
+  filter(SEASON=='1994',HOMETEAM=='Tottenham',AWAYTEAM=='Arsenal')
+```
+In the case, in which we used Poisson regression, the probability of Arsenal to win is twice more than that of Tottenham. While, using distribution approach, Tottenham has slightly higher probability to win than Arsenal.
+An important thing to mention is that, when using distribution approach, the probabilities of both teams are almost the same, indicating that the draw is highly possible.
+The actual result was the win of away team, Arsenal, with the score 1-0. Poisson regression approach was the one to predict the right result, although distribution approach was near too, as the actual score is close to draw.
+
+# Problem 6
+
+```{r}
+nba2009_2017 <- nba2009_2017[-4664,]
+```
+```{r}
+nba=nba2009_2017%>%
+  select(home.TEAM_NAME,away.TEAM_NAME,home.WL)%>%
+  mutate(hw=ifelse(home.WL=='W',1,0),
+         aw=ifelse(home.WL=='L',1,0))
+nba_new=nba%>%
+  mutate(home.TEAM_NAME=as.factor(home.TEAM_NAME),
+         away.TEAM_NAME=as.factor(away.TEAM_NAME))%>%
+  group_by(home.TEAM_NAME,away.TEAM_NAME)%>%
+  summarise(ht=sum(hw),at=sum(aw))
+```
+
+# Problem 7
+
+```{r}
+model=BTm(cbind(ht,at),home.TEAM_NAME, away.TEAM_NAME,data=nba_new)
+abilities=as.data.frame(BTabilities(model))
+abilities$team=rownames(abilities)
+abilities=abilities[order(abilities$ability,decreasing = T),]
+```
+
+# Problem 8
+
+```{r}
+abilities_min=abilities
+abilities_min$ability=abilities$ability-min(abilities$ability)
+ggplot(data=abilities_min, aes(x=reorder(team,ability),y=ability))+geom_bar(stat = 'identity',fill=1:30)+coord_flip()+labs(x='Teams',y='Ability to win', title='Ability to win of NBA teams')
+```
+The strongest team is San Antonio Spurs and the weakest one is Brooklyn Nets
+
+# Problem 9
+
+```{r}
+pred<-data.frame(home.TEAM_NAME=c('Charlotte Hornets','Golden State Warriors','Toronto Raptors'),away.TEAM_NAME=c('Boston Celtics','Minnesota Timberwolves','Portland Trail Blazers'))
+pred$home.TEAM_NAME=factor(pred$home.TEAM_NAME,levels(nba_new$home.TEAM_NAME))
+pred$away.TEAM_NAME=factor(pred$away.TEAM_NAME,levels(nba_new$away.TEAM_NAME))
+prob=predict(model,newdata = pred, level=2,type = 'response')
+final=data.frame(pred,Home_Win=prob, Away_Win=1-prob)
+```
+3 games, the results of which I chose topredict, are the following ones (home - away): Charlotte Hornets - Boston Celtics, Golden State Warriors - Minnesota Timberwolves, Toronto Raptors - Portland Trail Blazers.
+From the given probabilities, generated by using Bradley-Terry model, Boston Celstic is predicted to win Charlotte Horners with 64% chance, Golden State Warriors is predicted to win Minnesota Timberwolves with 75% chance, and Portland Trail Blazers is predicted to win Toronto Raptors with 54% chance. 
+
+
+
+
